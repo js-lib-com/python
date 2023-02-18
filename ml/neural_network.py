@@ -1,137 +1,266 @@
-import json
 import numpy as np
 from numpy import random
 from util import cost_prime
-from util import sigmoid
-from util import sigmoid_prime
 import time
+import util
 
 
 class NeuralLayer(object):
-    def __init__(self, layer_size, previous_layer_size):
-        # weights matrix of the previous layer synapses; matrix dimensions layer_size x previous_layer_size
-        self.weights = np.random.randn(layer_size, previous_layer_size)
-        # neurons biases matrix of layer_size x 1 (column vector)
+    """
+    A layer (hidden or output) of the neural network. Theoretically a layer contains neurons but there is no such
+    abstraction implemented. Instead a layer consist of floating point numbers stored on matrices; all matrices have
+    the same number of rows (height), that is the layer size. Note that a matrix with a single column is also known as
+    column vector.
+
+    A layer has also an activation function (a) and layer output vector is a product and sum of matrices: A = a(WX + B),
+    where X is the input vector. Activation function and its related derivative are configurable via constructor's
+    activation name argument.
+
+    Here are the matrices a layer is composed of:
+    - W: weights matrix [layer_size x input_size]: neurons' weights for inputs vector,
+    - B: biases vector [layer_size x 1]: neurons' bias,
+    - Z: weighted inputs vector [layer_size x 1]: cache for computed weighted inputs: Z = WX + B,
+    - A: activations vector [layer_size x 1]: cache for layer output vector: A = a(Z).
+
+    Layer and input size are provided as arguments at layer creation. Input size the expected size of the input vector.
+    It is not necessary - and usually isn't that input size to be the same as layer size; weights matrices dimension
+    ensure that product weights x inputs (WX) produces a matrix of layer size height.
+    """
+
+    def __init__(self, layer_size, input_size, activation):
+        """
+        Initialize weights matrix and biases, weighted inputs and activations vectors; all matrices and vectors have the
+        same number of rows. Weights matrix has the number of column equal with input size, whereas all vectors are
+        matrices with a single column (aka. column vectors).
+
+        Also initialize activation function and its derivative using provided activation name.
+
+        :param layer_size: (int) the number of neurons from this layer,
+        :param input_size: (int) the number of dimensions (features) input vector is expected to have,
+        :param activation: (str) name of activation function used by this layer.
+        """
+        self.layer_size = layer_size
+        self.input_size = input_size
+
+        # weights matrix of this layer inputs; matrix dimensions is layer_size x input_size
+        self.weights = np.random.randn(layer_size, input_size)
+        # neurons' biases vector is a matrix with dimensions layer_size x 1
         self.biases = np.random.rand(layer_size, 1)
         assert self.weights.shape[0] == self.biases.shape[0]
 
-        self.weights_gradient = np.zeros(self.weights.shape)
-        self.biases_gradient = np.zeros(self.biases.shape)
-
-        # cache for last computed weighted inputs and activation values; updated by forward propagation
+        # cache for last computed weighted inputs and activation values
+        # updated by forward propagation and used for layer training
         self.weighted_inputs = np.zeros((layer_size, 1))
         self.activations = np.zeros((layer_size, 1))
 
-        self.layer_type = "hidden"
-        self.previous_layer = None
-        self.next_layer = None
+        # initialize activation function and its related derivative
+        match activation.lower():
+            case "relu":
+                self.activation_function = util.relu
+                self.activation_function_prime = util.relu_prime
 
-    def set_type(self, layer_type):
-        self.layer_type = layer_type
+            case "sigmoid" | _:
+                self.activation_function = util.sigmoid
+                self.activation_function_prime = util.sigmoid_prime
 
-    def forward_propagation(self, data_vector):
-        # np.dot operates on matrices
-        # data_vector parameter is a column vector (a matrix with a single column)
-        # for matrix dot product to be possible the number of columns of the first matrix should be equal
-        # with the number rows of the second matrix
+    def forward_propagation(self, input_data):
+        # np.dot operates also on matrices
+        # input data parameter is a column vector (a matrix with a single column: n x 1)
+        # for matrix dot product to be mathematically possible the number of columns of the first matrix
+        # should be equal with the number rows of the second matrix
         # resulting matrix has the number of rows from the first matrix and the number of columns from the second
         # in our case: [m x n] . [n x 1] -> [m x 1]
 
-        assert self.weights.shape[1] == data_vector.shape[0]
-        assert data_vector.shape[1] == 1
+        assert input_data.shape[0] == self.weights.shape[1]
+        assert input_data.shape[1] == 1
 
-        np.dot(self.weights, data_vector, out=self.weighted_inputs)  # Z = W x X
+        np.dot(self.weights, input_data, out=self.weighted_inputs)  # Z = W x X
         np.add(self.weighted_inputs, self.biases, out=self.weighted_inputs)  # Z = W x X + B
-        sigmoid(self.weighted_inputs, out=self.activations)  # A = sigmoid(Z)
+        self.activation_function(self.weighted_inputs, out=self.activations)  # A = sigma(Z)
         return self.activations
 
-    def train(self, cost_error, previous_layer_activations, learning_rate):
-        assert previous_layer_activations.shape == (self.weights.shape[1], 1)
+    def train(self, cost_error, activations, learning_rate):
+        """
+        Layer training method uses previous layer activations vector and current layer cost error to compute the cost
+        function gradient for this layer. The gradient is then used, along with the learning rate, to adjust this
+        layer parameters.
 
-        # use back propagation algorithm to compute this layer cost error, using the next layer cost error
-        # then use cost error to compute this layer weights and biases gradient
+        This method assume current layer cost error is already calculated using back propagation algorithm.
 
-        np.dot(cost_error, previous_layer_activations.T, self.weights_gradient)
-        np.multiply(self.weights_gradient, learning_rate, out=self.weights_gradient)
-        np.subtract(self.weights, self.weights_gradient, out=self.weights)
+        :param cost_error: (numpy.ndarray) cost error vector, computed with back propagation; matrix of layer_size x 1,
+        :param activations: (numpy.ndarray) previous layer activations vector, matrix of input_size x 1,
+        :param learning_rate: (float) learning rate.
+        """
+        assert cost_error.shape == (self.layer_size, 1)
+        assert activations.shape == (self.input_size, 1)
 
-        np.multiply(cost_error, learning_rate, self.biases_gradient)
-        np.subtract(self.biases, self.biases_gradient, out=self.biases)
+        # use cost error to compute the cost function gradient with respect to weights
+        weights_gradient = np.dot(cost_error, activations.T)
+        # adjust weights gradient with learning rate
+        np.multiply(weights_gradient, learning_rate, out=weights_gradient)
+        # update this layer weights with cost gradient adjusted with learning rate
+        np.subtract(self.weights, weights_gradient, out=self.weights)
 
-    # experimental
-    def cost_error(self, prediction, target_value):
-        if self.layer_type == "output":
-            return cost_prime(prediction, target_value) * sigmoid_prime(self.weighted_inputs)
+        # cost error is the cost function gradient with respect to biases
+        # adjust biases gradient with learning rate
+        biases_gradient = np.multiply(cost_error, learning_rate)
+        # update this layer biases with cost gradient adjusted with learning rate
+        np.subtract(self.biases, biases_gradient, out=self.biases)
 
     def activation_prime(self):
-        return sigmoid_prime(self.weighted_inputs)
+        return self.activation_function_prime(self.weighted_inputs)
+
+    def config(self):
+        return dict(size=self.layer_size, activation='sigmoid')
 
     def dump(self, file):
-        data = {"weights": self.weights, "biases": self.biases}
-        json.dump(data, file)
+        weights = 0
+        for index in np.ndindex(self.weights.shape):
+            file.write(util.float2bytes(self.weights[index]))
+            weights += 1
+
+        biases = 0
+        for index in np.ndindex(self.biases.shape):
+            file.write(util.float2bytes(self.biases[index]))
+            biases += 1
+
+        print(f"dump weights:{weights}, biases:{biases}")
 
 
 class NeuralNetwork(object):
-    def __init__(self, sizes):
-        self.layers = [NeuralLayer(layer_size, previous_layer_size) for layer_size, previous_layer_size in
-                       zip(sizes[1:], sizes[:-1])]
+    def __init__(self, input_size, *layers_meta):
+        """
+        Initialize this neural network instance; this constructor mainly creates network's layers. Sizes argument is
+        the list of network's sizes configuration; first is dimension of the input vector, followed by network layers'
+        dimensions, in natural order from input to output.
+
+        :param sizes: (list) network's sizes configuration,
+        :param activation: (str) name of activation function
+        """
+        self.input_size = input_size
+
+        self.layers = []
+        for layers_meta in layers_meta:
+            layer_size, activation = layers_meta
+            self.layers.append(NeuralLayer(layer_size, input_size, activation))
+            # current layer size is the next layer input size
+            input_size = layer_size
 
         self.output_layer = self.layers[-1]
-        self.output_layer.set_type("output")
-
         self.epoch_results = []
 
-    def forward_propagation(self, data_vector):
+    def forward_propagation(self, input_data):
         """
-        Get data input vector and propagates it throw network layers. A layer output vector (aka activation vector) is
-        used as input vector for the next layer. Returns the output vector of the last layer, that is usually
-        named output layer.
+        Propagates input data vector throw network layers and returns network prediction. A layer output vector
+        (aka activation vector) is sed as input vector for the next layer. Returns the output vector of the last layer,
+        that is usually named output layer.
 
-        :param data_vector: input data as column vector (matrix with a single column),
-        :return: network output vector is the activation vector or the last layer.
+        :param input_data: (numpy.ndarray) input data as column vector (matrix with a single column).
+        :return: (numpy.ndarray) network prediction vector, that is the activation vector or the last layer.
         """
+        assert input_data.shape == (self.input_size, 1)
 
-        vector = data_vector
+        vector = input_data
         for layer in self.layers:
             vector = layer.forward_propagation(vector)
         return vector
 
     def train(self, train_set, test_set, epochs, learning_rate):
+        """
+        The goal of neural network training is to optimize network parameters for a minimal cost function. Parameters
+        adjustment is performed using gradient descent algorithm. This algorithm uses cost function gradient with
+        respect to network parameters; gradient is optimally computed using back propagation algorithm.
+
+        This method deals with overall learning loop but the actual const function gradient and parameters update is
+        delegated to each layer. Anyway, layer cost error computation - part of back propagation algorithm, is
+        performed on this method.
+
+        Training process is repeated multiple time, as configured by epochs argument.
+
+        :param train_set: (list) training set is a sequence of tuple (input data, target data),
+        :param test_set: (list) test set is a sequence of tuple (input data, target data),
+        :param epochs: (int)  the number of training epochs (how may times training is repeated),
+        :param learning_rate: (float) learning rate.
+        """
+
+        train_start_timestamp = time.time()
+        best_correct_tests = 0
+
         for epoch in range(epochs):
-            start_timestamp = time.time()
+            epoch_start_timestamp = time.time()
             random.shuffle(train_set)
-            activations = [np.array([])] + [layer.activations for layer in self.layers[:-1]]
+
+            # activations references list stores previous activation vector for a given layer index
+            # activations_references[i] is layers[i-1].activations; activations_references[0] is input data
+            activations_references = [np.array([])] + [layer.activations for layer in self.layers[:-1]]
 
             for input_data, target_value in train_set:
-                activations[0] = input_data
+                activations_references[0] = input_data
 
                 prediction = self.forward_propagation(input_data)
                 assert prediction.shape == target_value.shape
 
-                cost_error = cost_prime(prediction, target_value) * self.output_layer.activation_prime()
                 layer_index = len(self.layers) - 1
-                while layer_index >= 0:
-                    layer = self.layers[layer_index]
-                    layer.train(cost_error, activations[layer_index], learning_rate)
+                # use back propagation algorithm to compute network (output layer) cost error
+                # network cost error is then back propagated to previous layers
+                cost_error = cost_prime(prediction, target_value) * self.output_layer.activation_prime()
+                while True:
+                    # train current layer using its cost error
+                    # activations references list is ordered so that it returns previous layer activations vector
+                    current_layer = self.layers[layer_index]
+                    current_layer.train(cost_error, activations_references[layer_index], learning_rate)
 
+                    # step back and compute previous layer cost error using current layer cost error
                     if layer_index == 0:
                         break
                     layer_index -= 1
-                    layer = self.layers[layer_index]
+
+                    # here layer index was decremented and current layer is moved back
+                    # so that next layer is actually the layer that was just trained
+                    # compute cost error on the new current layer using cost error just used for training
+                    current_layer = self.layers[layer_index]
                     next_layer = self.layers[layer_index + 1]
-                    cost_error = np.dot(next_layer.weights.T, cost_error) * layer.activation_prime()
+                    cost_error = np.dot(next_layer.weights.T, cost_error) * current_layer.activation_prime()
 
             correct_tests = self.evaluate(test_set)
+            if correct_tests > best_correct_tests:
+                best_correct_tests = correct_tests
             self.epoch_results.append(correct_tests)
-            print(f"Epoch {epoch}: {correct_tests} / {len(test_set)} in {time.time() - start_timestamp} msec.")
+            print(f"Epoch {epoch}: {correct_tests} / {len(test_set)} in {time.time() - epoch_start_timestamp} sec.")
+
+        print()
+        print(f"Training finished in {time.time() - train_start_timestamp} sec.")
+        print(f"Best test evaluation {best_correct_tests / 100} %.")
+        print()
 
     def evaluate(self, test_set):
-        """Return the number of test inputs for which the neural network outputs the correct result. Note that the
+        """
+        Return the number of test inputs for which the neural network outputs the correct result. Note that the
         neural network's output is assumed to be the index of whichever neuron in the final layer has the highest
-        activation."""
+        activation.
+
+        Network evaluation uses given test set. The test set is a sequence of tuple (input data, target data); input
+        data is a vector (matrix with a single column) with dimension equal with input layer size. Expected target
+        value is a vector with dimension equal with output layer size; it uses hot one encoding.
+
+        :param test_set: (list) test set is a sequence of tuple (input data, target data).
+        :return (int) the number of tests fulfilled with correct prediction.
+        """
 
         correct_predictions = 0
         for input_data, target_value in test_set:
             if np.argmax(self.forward_propagation(input_data)) == np.argmax(target_value):
                 correct_predictions += 1
         return correct_predictions
+
+    def dump(self, network_name):
+        config = dict(
+            type="feedforward",
+            input=self.input_size,
+            layers=[layer.config() for layer in self.layers]
+        )
+        util.dump_config(config, network_name + ".yml")
+
+        with open(network_name + ".data", "wb") as file:
+            for layer in self.layers:
+                layer.dump(file)

@@ -1,4 +1,41 @@
 import numpy as np
+import yaml
+from yaml.loader import SafeLoader
+from munch import DefaultMunch
+import ruamel.yaml
+import struct
+
+
+def load_config(file_path):
+    with open(file_path, "r") as file:
+        config = yaml.load(file, Loader=SafeLoader)
+        return DefaultMunch.fromDict(config)
+
+
+def dump_config(config, file_path):
+    ruamel_yaml = ruamel.yaml.YAML()
+    ruamel_yaml.preserve_quotes = True
+    ruamel_yaml.indent(mapping=2, sequence=4, offset=2)
+    ruamel_yaml.width = 120
+    ruamel_yaml.allow_unicode = True
+
+    with open(file_path, "w") as file:
+        ruamel_yaml.dump(config, file)
+
+
+def float2bytes(f):
+    # Convert float to 32-bit binary string
+    bits = struct.pack('!f', f)
+    # Return binary string as 4 bytes
+    return bytearray(bits)
+
+
+def bytes2float(bytes_):
+    # Convert 4 bytes to binary string
+    bits = bytes(bytes_)
+    # Unpack binary string as 32-bit float value
+    f = struct.unpack('!f', bits)[0]
+    return f
 
 
 def one_hot(length, index):
@@ -22,6 +59,18 @@ def sigmoid(vector, out=None):
 def sigmoid_prime(x):
     """Derivative of the sigmoid function."""
     return sigmoid(x) * (1 - sigmoid(x))
+
+
+def relu(vector, out=None):
+    if out is None:
+        return np.maximum(0.0, vector)
+
+    np.maximum(0.0, vector, out=out)
+    return out
+
+
+def relu_prime(x):
+    return x > 0
 
 
 def cost_prime(prediction_value, target_value):
