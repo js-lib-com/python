@@ -18,17 +18,16 @@ test_inputs = [np.reshape(image, (784, 1)) for image in test_set[0]]
 test_targets = [one_hot(10, label) for label in test_set[1]]
 test_data = list(zip(test_inputs, test_targets))
 
-neural_network = NeuralNetwork(784, (30, "sigmoid"), (10, "sigmoid"))
-print(neural_network)
+nn = NeuralNetwork(784, (30, "sigmoid"), (10, "sigmoid"))
+print("Start neural network's parameters optimization.")
+nn.train(train_data, test_data, 30, 0.3)
+print(nn.epoch_results)
 
-neural_network.train(train_data, test_data, 30, 0.3)
+# comment out network dump since currently saved accuracy is around its maximum - 95.1 %
+# nn.dump("demo")
 
-print(neural_network.epoch_results)
-
-neural_network.dump("xdemo")
-
-result_x = range(0, len(neural_network.epoch_results))
-result_y = neural_network.epoch_results
+result_x = range(0, len(nn.epoch_results))
+result_y = nn.epoch_results
 
 spline_fun = interp.make_interp_spline(result_x, result_y)
 spline_x = np.linspace(0, len(result_x), 500)
@@ -37,19 +36,3 @@ spline_y = spline_fun(spline_x)
 graph.plot(result_x, result_y, 'o')
 graph.plot(spline_x, spline_y)
 graph.show()
-
-"""
-config = util.config("demo.yml")
-print(config.nn.layers[0].size)
-print(config.nn.layers[0].activation)
-for layer in config.nn.layers:
-    print(f"size: {layer.size}, activation: {layer.activation}")
-
-pi = 3.14159
-bytes_ = util.float2bytes(pi)
-print(bytes_)  # prints: bytearray(b'@I\xfb\x1f')
-
-bytes_ = b'@I\xfb\x1f'
-pi = util.bytes2float(bytes_)
-print(pi)  # prints: 3.141590118408203
-"""

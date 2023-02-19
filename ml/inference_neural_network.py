@@ -1,5 +1,6 @@
 import pickle
 import numpy as np
+from munch import DefaultMunch
 import util
 
 
@@ -50,22 +51,27 @@ class InferenceNeuralNetwork(object):
         return vector
 
 
-inn = InferenceNeuralNetwork(util.load_config("xdemo.yml"), "xdemo.data")
-print(inn)
+def main():
+    config = DefaultMunch.fromDict(util.load_config("demo.yml"))
+    inn = InferenceNeuralNetwork(config, "demo.data")
+    print(inn)
 
-with open("mnist.pkl", "rb") as file:
-    data_set = pickle.load(file, encoding="latin1")
+    with open("mnist.pkl", "rb") as file:
+        data_set = pickle.load(file, encoding="latin1")
 
-test_set = data_set[2]
-test_images = test_set[0]
-test_labels = test_set[1]
+    test_set = data_set[2]
+    test_images = test_set[0]
+    test_labels = test_set[1]
 
-index = 1356
-input_data = np.array(test_images[index])
-print(input_data.shape)
-input_data = np.reshape(input_data, (784, 1))
-print(input_data.shape)
+    index = 1357
+    input_data = np.array(test_images[index])
+    print(input_data.shape)
+    input_data = np.reshape(input_data, (784, 1))
+    print(input_data.shape)
 
-result = inn.forward_propagation(input_data)
-print(np.argmax(result))
-print(test_labels[index])
+    result = inn.forward_propagation(input_data)
+    print(np.argmax(result))
+    print(test_labels[index])
+
+
+main()

@@ -3,3 +3,5 @@
 /ml/mnist.pkl.gz
 /ml/train.csv
 /ml/mnist.pkl
+/ml/demo.yml
+/ml/demo.data

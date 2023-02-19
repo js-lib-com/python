@@ -1,15 +1,13 @@
 import numpy as np
 import yaml
 from yaml.loader import SafeLoader
-from munch import DefaultMunch
 import ruamel.yaml
 import struct
 
 
 def load_config(file_path):
     with open(file_path, "r") as file:
-        config = yaml.load(file, Loader=SafeLoader)
-        return DefaultMunch.fromDict(config)
+        return yaml.load(file, Loader=SafeLoader)
 
 
 def dump_config(config, file_path):

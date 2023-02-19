@@ -1,6 +1,6 @@
 import numpy as np
 from numpy import random
-from util import cost_prime
+import datetime
 import time
 import util
 
@@ -41,6 +41,7 @@ class NeuralLayer(object):
         """
         self.layer_size = layer_size
         self.input_size = input_size
+        self.activation = activation
 
         # weights matrix of this layer inputs; matrix dimensions is layer_size x input_size
         self.weights = np.random.randn(layer_size, input_size)
@@ -64,15 +65,21 @@ class NeuralLayer(object):
                 self.activation_function_prime = util.sigmoid_prime
 
     def forward_propagation(self, input_data):
+        """
+        Propagates input data vector throw network's layers and return activation vector from output layer.
+
+        :param input_data: (numpy.ndarray) network input data is a column vector (a matrix with a single column).
+        :return: (numpy.ndarray) activation vector from output layer.
+        """
         # np.dot operates also on matrices
         # input data parameter is a column vector (a matrix with a single column: n x 1)
         # for matrix dot product to be mathematically possible the number of columns of the first matrix
         # should be equal with the number rows of the second matrix
         # resulting matrix has the number of rows from the first matrix and the number of columns from the second
-        # in our case: [m x n] . [n x 1] -> [m x 1]
+        # in our case: [m x n] dot [n x 1] -> [m x 1]
 
+        assert input_data.shape == (self.input_size, 1)
         assert input_data.shape[0] == self.weights.shape[1]
-        assert input_data.shape[1] == 1
 
         np.dot(self.weights, input_data, out=self.weighted_inputs)  # Z = W x X
         np.add(self.weighted_inputs, self.biases, out=self.weighted_inputs)  # Z = W x X + B
@@ -111,9 +118,25 @@ class NeuralLayer(object):
         return self.activation_function_prime(self.weighted_inputs)
 
     def config(self):
-        return dict(size=self.layer_size, activation='sigmoid')
+        """
+        Return this layer configuration. Current implementation has only two properties: layer size and activation
+        function name, { layer_size, activation }.
+
+        :return: (dict) this layer configuration.
+        """
+        return dict(size=self.layer_size, activation=self.activation)
 
     def dump(self, file):
+        """
+        Dump layer's parameters to binary file but do not close the file pointer. Every parameter (this is a float
+        value) is saved in sequence to file on 4 bytes, accordingly IEEE 754 floating point standard. First are saved
+        layer's weights then biases.
+
+        This method leave the file pointer opened.
+
+        :param file: (file pointer) file pointer opened for binary write.
+        """
+
         weights = 0
         for index in np.ndindex(self.weights.shape):
             file.write(util.float2bytes(self.weights[index]))
@@ -130,12 +153,11 @@ class NeuralLayer(object):
 class NeuralNetwork(object):
     def __init__(self, input_size, *layers_meta):
         """
-        Initialize this neural network instance; this constructor mainly creates network's layers. Sizes argument is
-        the list of network's sizes configuration; first is dimension of the input vector, followed by network layers'
-        dimensions, in natural order from input to output.
+        Initialize the neural network instance. This constructor deals mainly with network's layers creation. For
+        every layer there is a configuration tuple containing layer size and activation function name.
 
-        :param sizes: (list) network's sizes configuration,
-        :param activation: (str) name of activation function
+        :param input_size: (int) expected input vector dimension (or features number),
+        :param layers_meta: (pointer) variable number of layer configuration tuples, one per layer.
         """
         self.input_size = input_size
 
@@ -148,6 +170,7 @@ class NeuralNetwork(object):
 
         self.output_layer = self.layers[-1]
         self.epoch_results = []
+        self.accuracy = 0
 
     def forward_propagation(self, input_data):
         """
@@ -156,7 +179,7 @@ class NeuralNetwork(object):
         that is usually named output layer.
 
         :param input_data: (numpy.ndarray) input data as column vector (matrix with a single column).
-        :return: (numpy.ndarray) network prediction vector, that is the activation vector or the last layer.
+        :return: (numpy.ndarray) network prediction vector, that is, the activation vector of the last layer.
         """
         assert input_data.shape == (self.input_size, 1)
 
@@ -203,7 +226,7 @@ class NeuralNetwork(object):
                 layer_index = len(self.layers) - 1
                 # use back propagation algorithm to compute network (output layer) cost error
                 # network cost error is then back propagated to previous layers
-                cost_error = cost_prime(prediction, target_value) * self.output_layer.activation_prime()
+                cost_error = util.cost_prime(prediction, target_value) * self.output_layer.activation_prime()
                 while True:
                     # train current layer using its cost error
                     # activations references list is ordered so that it returns previous layer activations vector
@@ -228,9 +251,10 @@ class NeuralNetwork(object):
             self.epoch_results.append(correct_tests)
             print(f"Epoch {epoch}: {correct_tests} / {len(test_set)} in {time.time() - epoch_start_timestamp} sec.")
 
+        self.accuracy = best_correct_tests / (len(test_set) / 100)
         print()
         print(f"Training finished in {time.time() - train_start_timestamp} sec.")
-        print(f"Best test evaluation {best_correct_tests / 100} %.")
+        print(f"Best test evaluation {self.accuracy} %.")
         print()
 
     def evaluate(self, test_set):
@@ -255,7 +279,11 @@ class NeuralNetwork(object):
 
     def dump(self, network_name):
         config = dict(
+            name=network_name,
+            version="1.0",
+            updated=datetime.date.today(),
             type="feedforward",
+            accuracy=self.accuracy,
             input=self.input_size,
             layers=[layer.config() for layer in self.layers]
         )
