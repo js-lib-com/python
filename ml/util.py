@@ -42,6 +42,18 @@ def one_hot(length, index):
     return array
 
 
+def linear(vector, out=None):
+    if out is None:
+        return vector
+    for i in range(len(vector)):
+        out[i] = vector[i]
+    return out
+
+
+def linear_prime(x):
+    return np.ones(x.shape)
+
+
 def sigmoid(vector, out=None):
     if out is None:
         return 1.0 / (1.0 + np.exp(-vector))
@@ -68,7 +80,7 @@ def relu(vector, out=None):
 
 
 def relu_prime(x):
-    return x > 0
+    return np.where(x > 0, 1, 0)
 
 
 def cost_prime(prediction_value, target_value):

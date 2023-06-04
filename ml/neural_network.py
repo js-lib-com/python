@@ -37,10 +37,13 @@ class NeuralLayer(object):
 
         :param layer_size: (int) the number of neurons from this layer,
         :param input_size: (int) the number of dimensions (features) input vector is expected to have,
-        :param activation: (str) name of activation function used by this layer.
+        :param activation: (str) optional name of activation function used by this layer, possible None in which case
+        default linear is used.
         """
         self.layer_size = layer_size
         self.input_size = input_size
+        if not activation:
+            activation = "linear"
         self.activation = activation
 
         # weights matrix of this layer inputs; matrix dimensions is layer_size x input_size
@@ -56,6 +59,10 @@ class NeuralLayer(object):
 
         # initialize activation function and its related derivative
         match activation.lower():
+            case "linear":
+                self.activation_function = util.linear
+                self.activation_function_prime = util.linear_prime
+
             case "relu":
                 self.activation_function = util.relu
                 self.activation_function_prime = util.relu_prime
@@ -194,14 +201,17 @@ class NeuralNetwork(object):
         adjustment is performed using gradient descent algorithm. This algorithm uses cost function gradient with
         respect to network parameters; gradient is optimally computed using back propagation algorithm.
 
-        This method deals with overall learning loop but the actual const function gradient and parameters update is
+        This method deals with overall learning loop but the actual cost function gradient and parameters update is
         delegated to each layer. Anyway, layer cost error computation - part of back propagation algorithm, is
         performed on this method.
 
         Training process is repeated multiple time, as configured by epochs argument.
 
+        Training and testing sets are sequences of (input data, target data) tuples where both input data and target
+        value are column vectors (ndarray matrices with a single column).
+
         :param train_set: (list) training set is a sequence of tuple (input data, target data),
-        :param test_set: (list) test set is a sequence of tuple (input data, target data),
+        :param test_set: (list) optional test set is a sequence of tuple (input data, target data), possible None,
         :param epochs: (int)  the number of training epochs (how may times training is repeated),
         :param learning_rate: (float) learning rate.
         """
@@ -218,6 +228,7 @@ class NeuralNetwork(object):
             activations_references = [np.array([])] + [layer.activations for layer in self.layers[:-1]]
 
             for input_data, target_value in train_set:
+                assert input_data.shape == (self.input_size, 1)
                 activations_references[0] = input_data
 
                 prediction = self.forward_propagation(input_data)
@@ -227,6 +238,7 @@ class NeuralNetwork(object):
                 # use back propagation algorithm to compute network (output layer) cost error
                 # network cost error is then back propagated to previous layers
                 cost_error = util.cost_prime(prediction, target_value) * self.output_layer.activation_prime()
+                # print(f"cost_error: {cost_error}")
                 while True:
                     # train current layer using its cost error
                     # activations references list is ordered so that it returns previous layer activations vector
@@ -243,7 +255,14 @@ class NeuralNetwork(object):
                     # compute cost error on the new current layer using cost error just used for training
                     current_layer = self.layers[layer_index]
                     next_layer = self.layers[layer_index + 1]
+                    # print(f"next_layer.weights.T: {next_layer.weights.T}")
+                    # print(f"cost_error: {cost_error}")
+                    # print(f"current_layer.activation_prime(): {current_layer.activation_prime()}")
                     cost_error = np.dot(next_layer.weights.T, cost_error) * current_layer.activation_prime()
+
+            if not test_set:
+                print(f"Epoch {epoch} in {time.time() - epoch_start_timestamp} sec.")
+                continue
 
             correct_tests = self.evaluate(test_set)
             if correct_tests > best_correct_tests:
@@ -251,10 +270,11 @@ class NeuralNetwork(object):
             self.epoch_results.append(correct_tests)
             print(f"Epoch {epoch}: {correct_tests} / {len(test_set)} in {time.time() - epoch_start_timestamp} sec.")
 
-        self.accuracy = best_correct_tests / (len(test_set) / 100)
         print()
         print(f"Training finished in {time.time() - train_start_timestamp} sec.")
-        print(f"Best test evaluation {self.accuracy} %.")
+        if test_set:
+            self.accuracy = best_correct_tests / (len(test_set) / 100)
+            print(f"Best test evaluation {self.accuracy} %.")
         print()
 
     def evaluate(self, test_set):

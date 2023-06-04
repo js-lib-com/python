@@ -34,7 +34,7 @@ class NeuralNetworkWorker(object):
         assert config.type == "feedforward"
 
         self.layers = []
-        self.input_size = config.input
+        self.input_size = config.input_vector
 
         input_size = self.input_size
         for layer_config in config.layers:
