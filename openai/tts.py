@@ -1,7 +1,7 @@
 import openai
 import pygame
 
-openai.api_key = "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"
+openai.api_key = ""
 
 # text = input("Enter text to generate speech: ")
 text = 'my name is julien. this is a simple text to speech test.'
